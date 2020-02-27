@@ -6,28 +6,28 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#endif  // _WIN32
+#endif // _WIN32
 
 #include <assert.h>
-#include <string.h>
 #include <atomic>
 #include <cassert>
 #include <condition_variable>
 #include <csignal>
+#include <functional>
 #include <iostream>
 #include <list>
 #include <mutex>
 #include <queue>
+#include <string.h>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
 namespace hermes {
 
 class signal {
- public:
+public:
   static std::mutex &mutex(void) {
     static std::mutex mutex;
     return mutex;
@@ -64,18 +64,18 @@ static unsigned int const DEFAULT_THREAD_POOL_SIZE = 100;
 static unsigned int const MAX_CONN = 100;
 
 class _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
- public:
+public:
   _no_default_ctor_cpy_ctor_mv_ctor_assign_op_(
       const _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ &) = delete;
   _no_default_ctor_cpy_ctor_mv_ctor_assign_op_(
       const _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ &&) = delete;
-  _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ &operator=(
-      const _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ &) = delete;
+  _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ &
+  operator=(const _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ &) = delete;
   _no_default_ctor_cpy_ctor_mv_ctor_assign_op_() = default;
 };
 
 class thread_pool final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
- public:
+public:
   typedef std::function<void(void)> task;
 
   explicit thread_pool(unsigned int threads) {
@@ -86,7 +86,7 @@ class thread_pool final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 
   ~thread_pool(void) { stop(); }
 
- public:
+public:
   void register_task(const task &tsk) {
     if (!tsk) {
       return;
@@ -116,7 +116,7 @@ class thread_pool final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     threads_.clear();
   }
 
- private:
+private:
   task assign_task() {
     std::unique_lock<std::mutex> lock(mutex_);
 
@@ -148,7 +148,7 @@ class thread_pool final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     }
   }
 
- private:
+private:
   std::condition_variable condvar_;
 
   std::mutex mutex_;
@@ -163,12 +163,17 @@ class thread_pool final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 #ifdef _WIN32
 #else
 class socket_pair final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
- public:
+public:
   socket_pair(void) : sv_{NOTSOCK, NOTSOCK} {}
 
-  ~socket_pair(void) { close(); }
+  ~socket_pair(void) {
+    try {
+      close();
+    } catch (std::exception &ex) {
+    }
+  }
 
- public:
+public:
   void close(void) {
     if (sv_[0] != NOTSOCK) {
       if (::close(sv_[0]) == -1) {
@@ -200,12 +205,12 @@ class socket_pair final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 
   void write(void) { ::write(sv_[1], "h", 1); }
 
- private:
+private:
   int sv_[2];
 };
 #endif
 
-}  // namespace internal
+} // namespace internal
 
 namespace network {
 
@@ -213,23 +218,21 @@ namespace tcp {
 #ifdef _WIN32
 #else
 class socket {
- public:
+public:
   socket(void) : bound_(0), fd_(NOTSOCK), host_(""), port_(0) {}
 
   socket(int fd, const std::string &host, unsigned int port)
       : bound_(0), fd_(fd), host_(host), port_(port) {}
 
   socket(socket &&s)
-      : bound_(s.bound() ? 1 : 0),
-        fd_(s.fd()),
-        host_(s.host()),
+      : bound_(s.bound() ? 1 : 0), fd_(s.fd()), host_(s.host()),
         port_(s.port()) {}
 
   bool operator==(const socket &s) const { return fd_ == s.fd(); }
 
   ~socket(void) = default;
 
- public:
+public:
   bool bound(void) const { return bound_; }
 
   int fd(void) const { return fd_; }
@@ -238,7 +241,7 @@ class socket {
 
   unsigned int port(void) const { return port_; }
 
- public:
+public:
   //
   // server operations
   //
@@ -360,15 +363,15 @@ class socket {
         ::recv(fd_, const_cast<char *>(buffer.data()), size_to_read, 0);
 
     switch (bytes_read) {
-      case -1:
-        throw std::runtime_error("recv() failed.");
-        break;
-      case 0:
-        std::cerr << "Connection closed by peer.\n";
-        fd_ = NOTSOCK;
-        break;
-      default:
-        break;
+    case -1:
+      throw std::runtime_error("recv() failed.");
+      break;
+    case 0:
+      std::cerr << "Connection closed by peer.\n";
+      fd_ = NOTSOCK;
+      break;
+    default:
+      break;
     }
 
     return buffer;
@@ -385,7 +388,7 @@ class socket {
     }
   }
 
- private:
+private:
   void create_socket(const std::string &host, unsigned int port) {
     if (fd_ != NOTSOCK) {
       return;
@@ -419,7 +422,7 @@ class socket {
     port_ = port;
   }
 
- private:
+private:
   char bound_;
 
   int fd_;
@@ -430,21 +433,21 @@ class socket {
 
   unsigned int port_;
 };
-#endif  // _WIN32
-}  // namespace tcp
+#endif // _WIN32
+} // namespace tcp
 
 namespace udp {
 #ifdef _WIN32
 #else
 class socket {
- public:
+public:
   socket(void) : bound_(false), fd_(NOTSOCK), host_(""), port_(0) {}
 
   bool operator==(const socket &s) const { return fd_ == s.fd(); }
 
   ~socket(void) = default;
 
- public:
+public:
   void init_datagram_socket(const std::string &host, unsigned int port,
                             bool broadcasting) {
     if (!broadcasting) {
@@ -535,7 +538,7 @@ class socket {
     }
   }
 
- private:
+private:
   void create_socket(const std::string &host, unsigned int port) {
     if (fd_ != NOTSOCK) {
       return;
@@ -601,7 +604,7 @@ class socket {
     ::memset(broadcast_info_.sin_zero, '\0', sizeof(broadcast_info_.sin_zero));
   }
 
- public:
+public:
   bool bound(void) const { return bound_; }
 
   int fd(void) const { return fd_; }
@@ -610,7 +613,7 @@ class socket {
 
   unsigned int port(void) const { return port_; }
 
- private:
+private:
   bool bound_;
 
   struct sockaddr_in broadcast_info_;
@@ -625,10 +628,10 @@ class socket {
 
   struct sockaddr_storage source_info_;
 };
-#endif  // _WIN32
-}  // namespace udp
+#endif // _WIN32
+} // namespace udp
 
-}  // namespace network
+} // namespace network
 
 namespace internal {
 
@@ -636,7 +639,7 @@ namespace internal {
 #else
 #include <poll.h>
 class io_service final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
- public:
+public:
   typedef std::function<void(int)> callback;
 
   struct sub {
@@ -651,7 +654,7 @@ class io_service final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     std::atomic<char> unsub_ = ATOMIC_VAR_INIT(0);
   };
 
- public:
+public:
   io_service(void) : slaves_(DEFAULT_THREAD_POOL_SIZE) { init(); }
 
   io_service(unsigned int slaves) : slaves_(slaves) { init(); }
@@ -671,7 +674,7 @@ class io_service final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     }
   }
 
- private:
+private:
   void init(void) {
     try {
       socket_pair_.init();
@@ -790,25 +793,22 @@ class io_service final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     }
   }
 
- public:
-  template <typename T>
-  void on_read(const T &socket, callback cb) {
+public:
+  template <typename T> void on_read(const T &socket, callback cb) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto &sub = subs_[socket.fd()];
     sub.read_callback_ = cb;
     socket_pair_.write();
   }
 
-  template <typename T>
-  void on_write(const T &socket, callback cb) {
+  template <typename T> void on_write(const T &socket, callback cb) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto &sub = subs_[socket.fd()];
     sub.write_callback_ = cb;
     socket_pair_.write();
   }
 
-  template <typename T>
-  void unsubscribe(const T &socket) {
+  template <typename T> void unsubscribe(const T &socket) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto sub = subs_.find(socket.fd());
 
@@ -826,22 +826,20 @@ class io_service final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     socket_pair_.write();
   }
 
-  template <typename T>
-  void subscribe(const T &socket) {
+  template <typename T> void subscribe(const T &socket) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto &sub = subs_[socket.fd()];
     (void)sub;
     socket_pair_.write();
   }
 
-  template <typename T>
-  void wait_for_unsubscription(const T &socket) {
+  template <typename T> void wait_for_unsubscription(const T &socket) {
     std::unique_lock<std::mutex> lock(mutex_);
     condvar_.wait(lock,
                   [&]() { return subs_.find(socket.fd()) == subs_.end(); });
   }
 
- private:
+private:
   std::condition_variable condvar_;
 
   std::vector<struct pollfd> poll_structs_;
@@ -862,7 +860,7 @@ class io_service final : _no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 
 namespace {
 static std::shared_ptr<io_service> g_io_service = nullptr;
-}  // namespace
+} // namespace
 
 void set_io_service(const std::shared_ptr<io_service> &mpx) {
   if (g_io_service) {
@@ -884,7 +882,7 @@ const std::shared_ptr<io_service> &get_io_service(int slaves) {
   return g_io_service;
 }
 
-}  // namespace internal
+} // namespace internal
 
 namespace network {
 namespace tcp {
@@ -892,7 +890,7 @@ namespace tcp {
 #else
 
 class client {
- public:
+public:
   client(void) { io_service_ = internal::get_io_service(-1); }
 
   explicit client(socket &&socket)
@@ -901,18 +899,23 @@ class client {
     io_service_->subscribe<tcp::socket>(socket_);
   }
 
-  ~client(void) { disconnect(); }
+  ~client(void) {
+    try {
+      disconnect();
+    } catch (std::exception &ex) {
+    }
+  }
 
   client(const client &) = delete;
   client &operator=(const client &) = delete;
 
- public:
+public:
   typedef std::function<void(bool &, std::vector<char> &)>
       async_read_callback_t;
 
   typedef std::function<void(bool &, std::size_t &)> async_write_callback_t;
 
- private:
+private:
   async_read_callback_t _receive(bool &success, std::vector<char> &buffer) {
     std::lock_guard<std::mutex> lock(read_requests_mutex_);
 
@@ -993,7 +996,7 @@ class client {
     }
   }
 
- public:
+public:
   void async_read(const std::size_t &size,
                   const async_read_callback_t &callback) {
     std::lock_guard<std::mutex> lock(read_requests_mutex_);
@@ -1047,13 +1050,13 @@ class client {
 
     {
       std::lock_guard<std::mutex> lock(read_requests_mutex_);
-      std::queue<std::pair<std::size_t, async_read_callback_t> > rempty;
+      std::queue<std::pair<std::size_t, async_read_callback_t>> rempty;
       std::swap(read_requests_, rempty);
     }
 
     {
       std::lock_guard<std::mutex> lock(write_requests_mutex_);
-      std::queue<std::pair<std::vector<char>, async_write_callback_t> > wempty;
+      std::queue<std::pair<std::vector<char>, async_write_callback_t>> wempty;
       std::swap(write_requests_, wempty);
     }
 
@@ -1062,7 +1065,7 @@ class client {
     socket_.close();
   }
 
- public:
+public:
   const std::string &host(void) const { return socket_.host(); }
 
   const std::shared_ptr<internal::io_service> &io_service(void) const {
@@ -1075,34 +1078,39 @@ class client {
 
   const tcp::socket &get_socket(void) const { return socket_; }
 
- private:
+private:
   std::shared_ptr<internal::io_service> io_service_;
 
   std::atomic<bool> is_connected_ = ATOMIC_VAR_INIT(false);
 
   tcp::socket socket_;
 
-  std::queue<std::pair<std::size_t, async_read_callback_t> > read_requests_;
+  std::queue<std::pair<std::size_t, async_read_callback_t>> read_requests_;
 
   std::mutex read_requests_mutex_;
 
-  std::queue<std::pair<std::vector<char>, async_write_callback_t> >
+  std::queue<std::pair<std::vector<char>, async_write_callback_t>>
       write_requests_;
 
   std::mutex write_requests_mutex_;
 };
 
 class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
- public:
+public:
   server(void)
       //
       //
       //
       : io_service_(internal::get_io_service(-1)), conn_callback_(nullptr) {}
 
-  ~server(void) { stop(); }
+  ~server(void) {
+    try {
+      stop();
+    } catch (std::exception &ex) {
+    }
+  }
 
- private:
+private:
   void on_connection_available(int) {
     try {
       auto client = std::make_shared<tcp::client>(socket_.accept());
@@ -1113,7 +1121,7 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     }
   }
 
- public:
+public:
   typedef std::function<void(const std::shared_ptr<client> &)>
       connection_callback_t;
 
@@ -1168,8 +1176,8 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     clients_.clear();
   }
 
- public:
-  const std::list<std::shared_ptr<client> > &clients(void) const {
+public:
+  const std::list<std::shared_ptr<client>> &clients(void) const {
     return clients_;
   }
 
@@ -1181,8 +1189,8 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 
   const tcp::socket &get_socket(void) const { return socket_; }
 
- private:
-  std::list<std::shared_ptr<client> > clients_;
+private:
+  std::list<std::shared_ptr<client>> clients_;
 
   std::shared_ptr<internal::io_service> io_service_;
 
@@ -1196,28 +1204,28 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 };
 
 #endif
-}  // namespace tcp
+} // namespace tcp
 
 namespace udp {
 #ifdef _WIN32
 #else
 
 class client {
- public:
+public:
   client(void)
       : broadcast_mode_(false), io_service_(internal::get_io_service(-1)) {}
 
   ~client(void) { stop(); }
 
- public:
+public:
   typedef std::function<void(int)> async_send_callback_t;
 
- public:
+public:
   bool broadcast_mode_enabled(void) const { return broadcast_mode_; }
 
   const udp::socket &get_socket(void) const { return socket_; }
 
- private:
+private:
   void on_send(int) {
     std::unique_lock<std::mutex> lock(mutex_);
 
@@ -1247,7 +1255,7 @@ class client {
     }
   }
 
- public:
+public:
   void init(const std::string host, unsigned int port, bool broadcast_mode) {
     socket_.init_datagram_socket(host, port, broadcast_mode);
     broadcast_mode_ = broadcast_mode;
@@ -1316,33 +1324,38 @@ class client {
     }
   }
 
- private:
+private:
   std::atomic<bool> broadcast_mode_ = ATOMIC_VAR_INIT(false);
 
   std::shared_ptr<internal::io_service> io_service_;
 
   std::mutex mutex_;
 
-  std::queue<std::pair<std::vector<char>, async_send_callback_t> >
+  std::queue<std::pair<std::vector<char>, async_send_callback_t>>
       send_requests_;
 
   udp::socket socket_;
 };
 
 class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
- public:
+public:
   server(void)
       //
       //
       //
       : io_service_(internal::get_io_service(-1)) {}
 
-  ~server(void) { stop(); }
+  ~server(void) {
+    try {
+      stop();
+    } catch (std::exception &ex) {
+    }
+  }
 
- public:
+public:
   typedef std::function<void(std::vector<char>, int)> async_receive_callback_t;
 
- private:
+private:
   void on_read(int) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -1362,7 +1375,7 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     }
   }
 
- public:
+public:
   void async_recvfrom(const async_receive_callback_t &callback) {
     if (!socket_.bound()) {
       throw std::logic_error(
@@ -1401,7 +1414,7 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
     socket_.close();
   }
 
- public:
+public:
   const std::shared_ptr<internal::io_service> &io_service(void) const {
     return io_service_;
   }
@@ -1410,7 +1423,7 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
 
   const udp::socket &get_socket(void) const { return socket_; }
 
- private:
+private:
   async_receive_callback_t callback_;
 
   std::shared_ptr<internal::io_service> io_service_;
@@ -1422,8 +1435,8 @@ class server final : internal::_no_default_ctor_cpy_ctor_mv_ctor_assign_op_ {
   udp::socket socket_;
 };
 #endif
-}  // namespace udp
+} // namespace udp
 
-}  // namespace network
+} // namespace network
 
-}  // namespace hermes
+} // namespace hermes
