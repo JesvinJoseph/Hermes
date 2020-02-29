@@ -860,7 +860,6 @@ private:
 
 namespace {
 static std::shared_ptr<io_service> g_io_service = nullptr;
-} // namespace
 
 void set_io_service(const std::shared_ptr<io_service> &mpx) {
   if (g_io_service) {
@@ -881,7 +880,7 @@ const std::shared_ptr<io_service> &get_io_service(int slaves) {
 
   return g_io_service;
 }
-
+} // namespace
 } // namespace internal
 
 namespace network {
